@@ -26,6 +26,3 @@ def install_missing_tools(tools):
 
     # Return the collected results as a single string
     return "\n".join(results)
-
-if __name__ == "__main__":
-    print(check_tool_availability())

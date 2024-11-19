@@ -22,7 +22,6 @@ def cli(ctx, get_workdir, set_workdir):
         ctx.exit(0)
 
     if set_workdir:
-        # Set the working directory
         try:
             set_working_directory(set_workdir)
             ctx.obj["workdir"] = set_working_directory(set_workdir)
@@ -49,7 +48,8 @@ def check_tools(install):
         if install:
             instalation_message = ta.install_missing_tools(missing_tools)
             click.echo(instalation_message)
-
+    else:
+        click.echo("No missing tools found.")
 # Dynamically register module commands
 cli.add_command(filesystem.module, name="filesystem")
 cli.add_command(metadata.module, name="metadata")
