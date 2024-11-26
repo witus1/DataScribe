@@ -1,5 +1,7 @@
 import click
-from utils.config import set_working_directory, get_working_directory
+import os
+from utils.config import set_working_directory, get_working_directory, save_config
+from utils.helper import resolve_path
 from modules import metadata, filesystem, multimedia, text_extraction
 import utils.tools_availability as ta
 import subprocess
@@ -22,13 +24,17 @@ def cli(ctx, get_workdir, set_workdir):
         ctx.exit(0)
 
     if set_workdir:
+        # Resolve the path using the helper function
+        resolved_path = resolve_path(set_workdir, ctx.obj["workdir"])
         try:
-            set_working_directory(set_workdir)
-            ctx.obj["workdir"] = set_working_directory(set_workdir)
+            if os.path.exists(resolved_path) and os.path.isdir(resolved_path):
+                save_config({"workdir": resolved_path})
+                click.echo(f"Working directory set to: {resolved_path}")
+            else:
+                raise ValueError(f"Invalid directory: {resolved_path}")
         except ValueError as e:
             click.echo(str(e))
         ctx.exit(0)
-
     # If no options or commands are provided, print help
     if not ctx.invoked_subcommand:
         click.echo(ctx.get_help())
