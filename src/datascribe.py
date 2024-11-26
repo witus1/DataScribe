@@ -31,7 +31,7 @@ def cli(ctx, get_workdir, set_workdir):
                 save_config({"workdir": resolved_path})
                 click.echo(f"Working directory set to: {resolved_path}")
             else:
-                raise ValueError(f"Invalid directory: {resolved_path}")
+                raise ValueError(f"Invalid directory: \033[91m{resolved_path}\033[0m")
         except ValueError as e:
             click.echo(str(e))
         ctx.exit(0)
