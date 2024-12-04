@@ -146,13 +146,33 @@ def get_metadata_gps(ctx, file_path, save_as: str, save_to: str, location: bool)
             save_metadata_as_txt(metadata, save_path)
 
 @module.command()
-@click.option("--depth", type=click.INT, required=True, help="Depth of search")
+@click.argument("dir_path", type=click.Path())
+@click.option("--depth", type=click.INT, default=0, help="Depth of recursive search.")
 @click.pass_context
-def get_files_with_gps(ctx):
-    pass
+def get_files_with_gps(ctx, dir_path, depth):
+    """
+        Check for GPS metadata in all files within a directory.
+        PATH is the directory to search.
+    """
+    try:
+        check_path_type(ctx.obj['workdir'], dir_path, has_to_be_file=False)
+        dir_path = resolve_path(ctx.obj['workdir'], dir_path)
+    except Exception as e:
+        click.echo(e)
+        sys.exit()
+
+    click.echo(f"Searching for GPS metadata in: {dir_path}")
+    files_with_gps = list_files_with_gps_metadata(dir_path, depth)
+
+    if files_with_gps:
+        click.echo(f"Files with GPS metadata ({len(files_with_gps)} found):")
+        for file in files_with_gps:
+            click.echo(f"- {file}")
+    else:
+        click.echo("No files with GPS metadata found.")
 
 
-#help functions
+#-------------help functions-------------
 def save_metadata_as_json(metadata, save_path):
     """
     Save metadata to a JSON file.
@@ -220,3 +240,32 @@ def get_raw_gps_metadata(file_path):
     if "GPSVersionID" not in metadata and "GPSLatitude" not in metadata:
         raise Exception("No GPS metadata found")
     return metadata
+
+def list_files_with_gps_metadata(directory, depth):
+    """
+    List all files with GPS metadata in a directory up to a given depth.
+    :param directory: Path to the directory.
+    :param depth: Depth of recursive search. If None, search is unlimited.
+    :return: List of file paths with GPS metadata.
+    """
+    files_with_gps = []
+
+    for root, dirs, files in os.walk(directory):
+        # Limit recursion depth if depth is specified
+        if depth is not None:
+            current_depth = root[len(directory):].count(os.sep)
+            if current_depth >= depth:
+                dirs[:] = []  # Do not recurse further
+
+        for file in files:
+            file_path = os.path.join(root, file)
+            try:
+                # Attempt to retrieve GPS metadata
+                get_raw_gps_metadata(file_path)
+                files_with_gps.append(file_path)  # If no exception, add file to the list
+            except Exception:
+                # Skip files without GPS metadata or on error
+                pass
+
+    return files_with_gps
+

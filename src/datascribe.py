@@ -25,7 +25,7 @@ def cli(ctx, get_workdir, set_workdir):
 
     if set_workdir:
         # Resolve the path using the helper function
-        resolved_path = resolve_path(set_workdir, ctx.obj["workdir"])
+        resolved_path = resolve_path(ctx.obj["workdir"],set_workdir)
         try:
             if os.path.exists(resolved_path) and os.path.isdir(resolved_path):
                 save_config({"workdir": resolved_path})
