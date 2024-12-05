@@ -14,15 +14,6 @@ def module():
     """
     pass
 
-@module.command()
-@click.option("--date-less-than", type=click.DateTime(), help="Find files with dates earlier than this.")
-@click.option("--date-greater-than", type=click.DateTime(), help="Find files with dates later than this.")
-@click.pass_context
-def search_by_date(ctx:click.Context, date_less_than, date_greater_than, path):
-    """
-    Search files by metadata dates.
-    """
-    pass
 
 @module.command()
 @click.argument("file_path", type=click.Path())
@@ -225,6 +216,38 @@ def find_size_based(ctx, dir_path, less_than, more_than, between, depth, type):
     except Exception as e:
         click.echo(f"Error: {e}")
 
+
+@module.command()
+@click.argument("file_path", type=click.Path())
+@click.option("--date-format", type=click.STRING, default="%Y-%m-%d %H:%M:%S", help="Specify the date format. \"Y-%m-%d %H:%M:%S\" is default")
+@click.option("--sorted", is_flag=True, help="Sort the output from oldest to newest.")
+@click.pass_context
+def get_file_dates(ctx, file_path, date_format, sorted):
+    """
+        Extract all available dates from a file using exiftool.
+
+        FILE_PATH is the path to the file to process.
+        """
+    try:
+        # Validate input paths
+        check_path_type(ctx.obj['workdir'], file_path, has_to_be_file=True)
+        file_path = resolve_path(ctx.obj['workdir'], file_path)
+    except Exception as e:
+        click.echo(e)
+        sys.exit()
+
+    try:
+        dates = get_dates_from_file(file_path, date_format, sorted)
+
+        if dates:
+            for key, date in dates:
+                click.echo(f"{key}: {date}")
+        else:
+            click.echo("No date metadata found in the file.")
+    except Exception as e:
+        click.echo(f"Error: {e}")
+
+
 #-------------help functions-------------
 def save_metadata_as_json(metadata, save_path):
     """
@@ -409,3 +432,50 @@ def get_size_filtered_results(directory, size_option, size_value, depth, type):
                 click.echo(f"Warning: Could not process directory {dir_path}: {e}")
 
     return results
+
+def get_dates_from_file(file_path, date_format, sorted_output):
+    """
+    Extract all time-related metadata from a file using exiftool.
+    :param file_path: Path to the file.
+    :param date_format: Optional format for the date output (e.g., '%Y-%m-%d').
+    :param dates_only: If True, include only fields with 'date' in their name.
+    :param sorted_output: If True, sort the output from oldest to newest.
+    :return: List of tuples (key, value).
+    """
+    try:
+        # Run exiftool to get all time-related metadata
+        metadata_raw = run_command(["exiftool", "-j", "-time:all", "-dateFormat", "%Y:%m:%d %H:%M:%S", file_path])
+        metadata = json.loads(metadata_raw)[0]  # Exiftool outputs a JSON array
+
+        # Filter out GPSTimeStamp and GPSDateStamp
+        filtered_metadata = {key: value for key, value in metadata.items() if
+                             key not in {"GPSTimeStamp", "GPSDateStamp"}}
+
+        times = []
+        for key, raw_time in filtered_metadata.items():
+            try:
+                from datetime import datetime
+
+                # Parse the raw time using the default ExifTool format
+                parsed_time = datetime.strptime(raw_time, "%Y:%m:%d %H:%M:%S")
+
+                # Format the time if a custom date format is provided
+                formatted_time = parsed_time.strftime(date_format) if date_format else raw_time
+
+                times.append((key, formatted_time, parsed_time))
+            except Exception:
+                # Fallback for non-time-related fields
+                times.append((key, raw_time, None))
+
+        # Sort results if --sorted is enabled
+        if sorted_output:
+            times = sorted(
+                times,
+                key=lambda x: x[2] if x[2] else datetime.max  # Use parsed_time or a max date as fallback
+            )
+
+        # Return the final result without parsed_time for cleaner output
+        return [(key, value) for key, value, _ in times]
+
+    except Exception as e:
+        raise Exception(f"Error processing metadata: {e}")
