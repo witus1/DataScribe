@@ -1,5 +1,8 @@
 import sys
 import os
+import stat
+import pwd
+import grp
 from utils.helper import check_path_type, resolve_path, run_command
 import click
 import json
@@ -336,6 +339,101 @@ def get_file_mime_type(ctx, file_path):
         click.echo(e)
         sys.exit()
 
+@module.command()
+@click.argument("file_path", type=click.Path())
+@click.option("--human", is_flag=True, default=False, help="Display permissions in detailed human-readable format.")
+@click.option("--owner", is_flag=True, default=False, help="Display the file owner's name.")
+@click.option("--group", is_flag=True, default=False, help="Display the group that has access to the file.")
+@click.option("--number", is_flag=True, default=False, help="Display permissions in numeric format.")
+@click.pass_context
+def get_file_permissions(ctx, file_path, human, owner, group, number):
+    """
+    Get the permissions, owner, and group of a file.
+
+    FILE_PATH is the path to the file.
+    """
+    try:
+        # Validate input paths
+        check_path_type(ctx.obj['workdir'], file_path, has_to_be_file=True)
+        file_path = resolve_path(ctx.obj['workdir'], file_path)
+    except Exception as e:
+        click.echo(e)
+        sys.exit()
+
+    try:
+        file_info = _get_file_info(file_path, human=human, include_owner=owner, include_group=group, include_number=number)
+
+        click.echo(f"File: {file_path}")
+
+        if human:
+            click.echo("Permissions:")
+            for category, perms in file_info["permissions"].items():
+                click.echo(f"  {category.capitalize()}:")
+                for perm, has_perm in perms.items():
+                    status = "Yes" if has_perm else "No"
+                    click.echo(f"    {perm.capitalize()}: {status}")
+        else:
+            click.echo(f"Permissions: {file_info['permissions']}")
+
+        if number:
+            click.echo(f"Numeric Permissions: {file_info['number']}")
+
+        if owner:
+            click.echo(f"Owner: {file_info['owner']}")
+
+        if group:
+            click.echo(f"Group: {file_info['group']}")
+    except Exception as e:
+        click.echo(f"Error: {e}")
+
+@module.command()
+@click.argument("dir_path", type=click.Path())
+@click.option("--owner", type=str, help="Owner permissions (numeric or symbolic, e.g., 'rw-' or '7').")
+@click.option("--group", type=str, help="Group permissions (numeric or symbolic, e.g., 'r--' or '5').")
+@click.option("--other", type=str, help="Other permissions (numeric or symbolic, e.g., 'rwx' or '7').")
+@click.option("--all", type=str, help="All permissions (e.g., '755').")
+@click.option("--depth", type=int, default=0, help="Depth of recursive search (default: 0).")
+@click.option("--include-owner", type=str, help="Search for files owned by this user.")
+@click.option("--include-special", is_flag=True, default=False, help="Include special bits (SUID, SGID, Sticky Bit).")
+@click.pass_context
+def find_files_by_permissions(ctx,dir_path, owner, group, other, all, depth, include_owner, include_special):
+    """
+    Search for files in a directory with specific permissions.
+
+    DIR_PATH is the path to the directory to search.
+    """
+    try:
+        # Validate input paths
+        check_path_type(ctx.obj['workdir'], file_path, has_to_be_file=True)
+        file_path = resolve_path(ctx.obj['workdir'], file_path)
+    except Exception as e:
+        click.echo(e)
+        sys.exit()
+
+    try:
+        # Parse `--all` or individual permissions
+        owner_perm = group_perm = other_perm = None
+        if all:
+            owner_perm, group_perm, other_perm = _parse_all_permissions(all)
+        else:
+            owner_perm = _parse_permission_string(owner, include_special=include_special) if owner else None
+            group_perm = _parse_permission_string(group, include_special=include_special) if group else None
+            other_perm = _parse_permission_string(other, include_special=include_special) if other else None
+
+        # Search for matching files
+        matching_files = _search_files_by_permissions(
+            dir_path, owner_perm, group_perm, other_perm, include_owner, depth, include_special
+        )
+
+        # Display results
+        if matching_files:
+            click.echo(f"Found {len(matching_files)} matching files:")
+            for file in matching_files:
+                click.echo(f"- {file}")
+        else:
+            click.echo("No matching files found.")
+    except Exception as e:
+        click.echo(f"Error: {e}")
 #-------------help functions-------------
 def _save_metadata_as_json(metadata, save_path):
     """
@@ -684,3 +782,191 @@ def _find_files_by_type(dir_path, mime_type, extension, depth):
                 click.echo(f"Warning: Skipping file {file_path}: {e}")
 
     return matching_files
+
+def _get_file_info(file_path, human=False, include_owner=False, include_group=False, include_number=False):
+    """
+    Retrieve file permissions, owner, group, and numeric details.
+
+    :param file_path: Path to the file.
+    :param human: Whether to display permissions in detailed human-readable format.
+    :param include_owner: Whether to include the file owner's name.
+    :param include_group: Whether to include the group name.
+    :param include_number: Whether to include numeric permissions.
+    :return: A dictionary containing file information.
+    """
+    try:
+        # Get the file's stat information
+        file_stat = os.stat(file_path)
+
+        # Permissions
+        file_mode = file_stat.st_mode
+        if human:
+            permissions = _parse_file_permissions(file_mode)
+        else:
+            permissions = stat.filemode(file_mode)
+
+        # Numeric permissions
+        numeric_permissions = oct(file_mode & 0o777) if include_number else None
+
+        # File owner
+        owner = pwd.getpwuid(file_stat.st_uid).pw_name if include_owner else None
+
+        # Group
+        group = grp.getgrgid(file_stat.st_gid).gr_name if include_group else None
+
+        return {
+            "permissions": permissions,
+            "owner": owner,
+            "group": group,
+            "number": numeric_permissions,
+        }
+    except FileNotFoundError:
+        raise Exception(f"File not found: {file_path}")
+    except KeyError as e:
+        raise Exception(f"Error retrieving owner/group for {file_path}: {e}")
+    except Exception as e:
+        raise Exception(f"Error retrieving file info for {file_path}: {e}")
+
+def _parse_file_permissions(file_mode):
+    """
+    Parse file permissions into human-readable categories for owner, group, and other.
+
+    :param file_mode: File mode from `os.stat(file_path).st_mode`.
+    :return: Dictionary with parsed permissions.
+    """
+    # Human-readable permissions
+    permissions = {
+        "owner": {
+            "read": bool(file_mode & stat.S_IRUSR),
+            "write": bool(file_mode & stat.S_IWUSR),
+            "execute": bool(file_mode & stat.S_IXUSR),
+            "suid": bool(file_mode & stat.S_ISUID),
+        },
+        "group": {
+            "read": bool(file_mode & stat.S_IRGRP),
+            "write": bool(file_mode & stat.S_IWGRP),
+            "execute": bool(file_mode & stat.S_IXGRP),
+            "sgid": bool(file_mode & stat.S_ISGID),
+        },
+        "other": {
+            "read": bool(file_mode & stat.S_IROTH),
+            "write": bool(file_mode & stat.S_IWOTH),
+            "execute": bool(file_mode & stat.S_IXOTH),
+            "sticky": bool(file_mode & stat.S_ISVTX),
+        },
+    }
+    return permissions
+
+def _search_files_by_permissions(dir_path, owner_perm, group_perm, other_perm, owner_name, depth, include_special):
+    """
+    Search for files with specific permissions in a directory, including non-standard bits.
+    :param dir_path: Directory path to search.
+    :param owner_perm: Owner permission.
+    :param group_perm: Group permission.
+    :param other_perm: Other permission.
+    :param owner_name: Specific owner name to match.
+    :param depth: Depth of search (0 for current directory only).
+    :param include_special: Whether to include SUID, SGID, and Sticky Bit checks.
+    :return: List of matching files.
+    """
+    matching_files = []
+    for root, dirs, files in os.walk(dir_path):
+        # Apply depth limit
+        current_depth = root[len(dir_path):].count(os.sep)
+        if depth == 0 and current_depth > 0:
+            del dirs[:]
+            continue
+        if depth is not None and current_depth >= depth:
+            del dirs[:]
+
+        for file in files:
+            file_path = os.path.join(root, file)
+            try:
+                file_stat = os.stat(file_path)
+
+                # Match permissions, including special bits
+                if not _match_permissions_with_special(file_stat.st_mode, owner_perm, group_perm, other_perm, include_special):
+                    continue
+
+                # Match owner if specified
+                if owner_name:
+                    file_owner = pwd.getpwuid(file_stat.st_uid).pw_name
+                    if file_owner != owner_name:
+                        continue
+
+                # File matches criteria
+                matching_files.append(file_path)
+            except Exception as e:
+                click.echo(f"Warning: Could not process file {file_path}: {e}")
+    return matching_files
+
+def _match_permissions_with_special(file_mode, owner_perm, group_perm, other_perm, include_special=False):
+    """
+    Check if a file's mode matches the given permissions, including special bits.
+    :param file_mode: File mode from os.stat.
+    :param owner_perm: Integer owner permission.
+    :param group_perm: Integer group permission.
+    :param other_perm: Integer other permission.
+    :param include_special: Whether to include SUID, SGID, and Sticky Bit checks.
+    :return: True if permissions match, otherwise False.
+    """
+    # Extract permissions for owner, group, and other
+    owner = (file_mode & 0o700) >> 6
+    group = (file_mode & 0o070) >> 3
+    other = file_mode & 0o007
+
+    # Check non-standard bits
+    suid = bool(file_mode & stat.S_ISUID) if include_special else None
+    sgid = bool(file_mode & stat.S_ISGID) if include_special else None
+    sticky = bool(file_mode & stat.S_ISVTX) if include_special else None
+
+    return (
+        (owner_perm is None or owner == owner_perm) and
+        (group_perm is None or group == group_perm) and
+        (other_perm is None or other == other_perm) and
+        (not include_special or suid is not None or sgid is not None or sticky is not None)
+    )
+
+def _parse_permission_string(permission_str, include_special=False):
+    """
+    Convert a permission string (e.g., 'r--', 'rw-', '7', 's', 't') to an integer value.
+    :param permission_str: Permission string (e.g., 'r--', 'rw-', '7', 's').
+    :param include_special: Whether to handle SUID, SGID, and Sticky Bit (symbolic: 's', 't').
+    :return: Integer representation of permissions.
+    """
+    if permission_str.isdigit():
+        # Convert numeric permission
+        return int(permission_str)
+
+    # Symbolic permission (e.g., 'rw-s')
+    permission_map = {"r": 4, "w": 2, "x": 1, "-": 0}
+    special_map = {"s": 4, "t": 1}
+
+    total = sum(permission_map[char] for char in permission_str if char in permission_map)
+    if include_special:
+        for char in permission_str:
+            if char in special_map:
+                total += special_map[char]
+
+    return total
+
+def _parse_all_permissions(permission_str):
+    """
+    Parse the `--all` option to split permissions for owner, group, and other.
+    :param permission_str: A numeric string (e.g., '755') or symbolic string (e.g., 'rwxr-xr-x').
+    :return: A tuple (owner_perm, group_perm, other_perm).
+    """
+    if permission_str.isdigit() and len(permission_str) == 3:
+        # Numeric permissions (e.g., '755')
+        owner_perm = int(permission_str[0])
+        group_perm = int(permission_str[1])
+        other_perm = int(permission_str[2])
+        return owner_perm, group_perm, other_perm
+    elif len(permission_str) == 9:
+        # Symbolic permissions (e.g., 'rwxr-xr-x')
+        owner_perm = _parse_permission_string(permission_str[:3])  # First 3 characters
+        group_perm = _parse_permission_string(permission_str[3:6])  # Middle 3 characters
+        other_perm = _parse_permission_string(permission_str[6:])  # Last 3 characters
+        return owner_perm, group_perm, other_perm
+    else:
+        raise ValueError("--all must be a 3-digit numeric string (e.g., '755') or a 9-character symbolic string (e.g., 'rwxr-xr-x').")
