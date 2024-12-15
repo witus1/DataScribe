@@ -42,3 +42,47 @@ def check_path_type(ctx_path, path, has_to_be_file):
 
     elif has_to_be_file and os.path.isdir(resolved_path):
         raise click.BadParameter(f"Given path is not a file: {resolved_path}")
+
+
+def parse_size_from_string(size_str):
+    """
+    Parse a human-readable size string (e.g., '64 MB', '24,5 MB') into bytes.
+    :param size_str: Size string to parse.
+    :return: Size in bytes as an integer.
+    """
+    units ={
+        "tb": 1024 ** 4,
+        "gb": 1024 ** 3,
+        "mb": 1024 ** 2,
+        "kb": 1024,
+        "b": 1
+    }
+
+    size_str = size_str.strip().lower().replace(",", ".")  # Normalize input
+    for unit in units:
+        if size_str.endswith(unit):
+            try:
+                # Remove the unit from the string and convert to a float
+                numeric_part = size_str.removesuffix(unit)
+                value = float(numeric_part)
+                return int(value * units[unit])
+            except ValueError:
+                raise ValueError(f"Invalid size value: {size_str}")
+    raise ValueError(f"Unknown size unit in: {size_str}")
+
+
+def parse_size_to_string(size_bytes):
+    """
+        Convert size in bytes to a human-readable format.
+        :param size_bytes: Size in bytes.
+        :return: Formatted size string (e.g., '100 MB', '1.5 GB').
+        """
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(size_bytes)
+    unit_index = 0
+
+    while size >= 1024 and unit_index < len(units) - 1:
+        size /= 1024
+        unit_index += 1
+
+    return f"{size:.1f} {units[unit_index]}"

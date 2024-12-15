@@ -3,7 +3,7 @@ import os
 import stat
 import pwd
 import grp
-from utils.helper import check_path_type, resolve_path, run_command
+from utils.helper import check_path_type, resolve_path, run_command, parse_size_from_string, parse_size_to_string
 import click
 import json
 import xml.etree.ElementTree as ET
@@ -187,9 +187,9 @@ def find_files_by_size(ctx, dir_path, less_than, more_than, between, depth, type
 
     try:
         # Parse size strings into bytes
-        less_than = _parse_size_from_string(less_than) if less_than else None
-        more_than = _parse_size_from_string(more_than) if more_than else None
-        between = (_parse_size_from_string(between[0]), _parse_size_from_string(between[1])) if between else None
+        less_than = parse_size_from_string(less_than) if less_than else None
+        more_than = parse_size_from_string(more_than) if more_than else None
+        between = (parse_size_from_string(between[0]), parse_size_from_string(between[1])) if between else None
 
         if less_than:
             results = _get_size_filtered_results(dir_path, "-", less_than, depth, type)
@@ -212,7 +212,7 @@ def find_files_by_size(ctx, dir_path, less_than, more_than, between, depth, type
         if results:
             click.echo(f"Found {len(results)} matches:")
             for path, size_bytes in results:
-                human_readable_size = _parse_size_to_string(size_bytes)
+                human_readable_size = parse_size_to_string(size_bytes)
                 click.echo(f"- {path} ({human_readable_size})")
         else:
             click.echo("No matches found.")
@@ -531,47 +531,6 @@ def _list_files_with_gps_metadata(directory, depth):
 
     return files_with_gps
 
-def _parse_size_from_string(size_str):
-    """
-    Parse a human-readable size string (e.g., '64 MB', '24,5 MB') into bytes.
-    :param size_str: Size string to parse.
-    :return: Size in bytes as an integer.
-    """
-    units ={
-        "tb": 1024 ** 4,
-        "gb": 1024 ** 3,
-        "mb": 1024 ** 2,
-        "kb": 1024,
-        "b": 1
-    }
-
-    size_str = size_str.strip().lower().replace(",", ".")  # Normalize input
-    for unit in units:
-        if size_str.endswith(unit):
-            try:
-                # Remove the unit from the string and convert to a float
-                numeric_part = size_str.removesuffix(unit)
-                value = float(numeric_part)
-                return int(value * units[unit])
-            except ValueError:
-                raise ValueError(f"Invalid size value: {size_str}")
-    raise ValueError(f"Unknown size unit in: {size_str}")
-
-def _parse_size_to_string(size_bytes):
-    """
-        Convert size in bytes to a human-readable format.
-        :param size_bytes: Size in bytes.
-        :return: Formatted size string (e.g., '100 MB', '1.5 GB').
-        """
-    units = ["B", "KB", "MB", "GB", "TB"]
-    size = float(size_bytes)
-    unit_index = 0
-
-    while size >= 1024 and unit_index < len(units) - 1:
-        size /= 1024
-        unit_index += 1
-
-    return f"{size:.1f} {units[unit_index]}"
 
 def _get_size_filtered_results(directory, size_option, size_value, depth, type):
     """
