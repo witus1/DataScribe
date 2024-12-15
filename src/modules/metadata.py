@@ -84,7 +84,7 @@ def get_gps_metadata(ctx, file_path, save_as: str, save_to: str, location: bool)
         Get GPS metadata from the file.
 
         FILE_PATH is the path to the file to extract metadata from.
-        """
+    """
     try:
         # Validate input paths
         check_path_type(ctx.obj['workdir'], file_path, has_to_be_file=True)
@@ -171,7 +171,7 @@ def find_files_with_gps(ctx, dir_path, depth):
 @click.option("--depth", type=click.INT, default=1, help="Depth of recursive search.")
 @click.option("-t", "--type", type=click.Choice(["f","d"], case_sensitive=False), required=True, help="Type of search. File or directory")
 @click.pass_context
-def find_size_based(ctx, dir_path, less_than, more_than, between, depth, type):
+def find_files_by_size(ctx, dir_path, less_than, more_than, between, depth, type):
     """
         Get list of files or directories based on size.
 
