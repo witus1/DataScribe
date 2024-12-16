@@ -9,6 +9,7 @@ def run_command(command):
         raise Exception(f"Command failed: {result.stderr}")
     return result.stdout.strip()
 
+
 def resolve_path(ctx_path, path):
     """
     Resolve a given path relative to the current working directory.
@@ -23,6 +24,7 @@ def resolve_path(ctx_path, path):
     else:
         # Otherwise, resolve it relative to the current working directory
         return os.path.abspath(os.path.join(ctx_path, path))
+
 
 def check_path_type(ctx_path, path, has_to_be_file):
     """
@@ -50,7 +52,7 @@ def parse_size_from_string(size_str):
     :param size_str: Size string to parse.
     :return: Size in bytes as an integer.
     """
-    units ={
+    units = {
         "tb": 1024 ** 4,
         "gb": 1024 ** 3,
         "mb": 1024 ** 2,
