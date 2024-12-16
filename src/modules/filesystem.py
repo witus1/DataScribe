@@ -1,8 +1,8 @@
+import json
 import sys
+import os
 import click
-from utils.helper import check_path_type, run_command
-
-from utils.helper import resolve_path
+from utils.helper import check_path_type,resolve_path, run_command, parse_size_to_string
 
 
 @click.group()
@@ -12,66 +12,75 @@ def module():
     """
     pass
 
-#todo has to be finished
+
 @module.command()
-@click.option('--path', required=True, type=click.STRING, help='Path where image file is located.')
+@click.argument('dir_path', type=click.Path())
+@click.option("--depth", type=click.INT, default=0, help="Maximum depth of recursion.")
+@click.option("--include-files", is_flag=True, default=False, help="Include files by listing.")
 @click.pass_context
-def get_disk_partition_info(ctx:click.Context, path):
+def directory_size(ctx, dir_path, depth, include_files):
+    """
+        Calculate the total size of a directory and list sizes of subdirectories/files.
+
+        DIR_PATH is the path to the directory to calculate the size of.
+    """
+
     try:
-        check_path_type(ctx.obj['workdir'], path, has_to_be_file=True)
+        # Validate input paths
+        check_path_type(ctx.obj['workdir'], dir_path, has_to_be_file=False)
+        dir_path = resolve_path(ctx.obj['workdir'], dir_path)
     except Exception as e:
         click.echo(e)
         sys.exit()
 
-    dict = get_disk_partition_info_to_dictionary(resolve_path(ctx.obj['workdir'], path))
-    click.echo(dict)
+    try:
+        entries = _list_directory_sizes(dir_path, depth, include_files)
 
-#helper functions
-#todo has to be finished
-def get_disk_partition_info_to_dictionary(path):
+        click.echo(f"Directory size summary for '{dir_path}':")
+        for path, size in entries:
+            if isinstance(size, int):  # Valid size
+                size_str = parse_size_to_string(size)
+                click.echo(f"- {path}: {size_str}")
+            else:  # Error case
+                click.echo(f"- {path}: {size}")
+    except Exception as e:
+        click.echo(f"Error: {e}")
 
-    run_command_result = run_command(['fdisk', '-l', path])
 
+def _list_directory_sizes(dir_path, depth, include_files):
+    """
+    List the sizes of subdirectories and files in a directory, up to a given depth.
 
-    fdisk_info = {"disk": {}, "partitions": []}
-    lines = run_command_result.splitlines()
+    :param dir_path: Path to the directory.
+    :param depth: Maximum depth to traverse (0 for current directory only).
+    :param include_files: Whether to include file sizes in the output.
+    :return: A list of tuples (path, size_in_bytes).
+    """
+    entries = []
+    try:
+        if os.path.isdir(dir_path):
 
-    for line in lines:
-        line = line.strip()
+            result = run_command(["du", "--bytes", "--max-depth", str(depth), dir_path])
+            # Parse the output to: <size> <path>
+            for line in result.splitlines():
+                size, path = line.split("\t")
+                entries.append((path, int(size)))
 
-        # General Disk Information
-        if line.startswith("Disk "):
-            # Example: Disk /dev/loop0: 4 GiB, 4294967296 bytes, 8388608 sectors
-            parts = line.split(",")
-            disk_description = parts[0]
-            size_info = parts[1] if len(parts) > 1 else None
+        # Include individual file sizes if requested
+        if include_files:
+            for root, _, files in os.walk(dir_path):
+                current_depth = root[len(dir_path):].count(os.sep)
+                if current_depth >= depth:
+                    break
 
-            # Parse disk description
-            disk_parts = disk_description.split()
-            if len(disk_parts) >= 2:
-                fdisk_info["disk"]["device"] = disk_parts[1].strip(":")
-                fdisk_info["disk"]["size"] = " ".join(disk_parts[2:])
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    try:
+                        file_size = int(run_command(["stat", "-c", "%s", file_path]))
+                        entries.append((file_path, file_size))
+                    except Exception as e:
+                        entries.append((file_path, f"Error: {e}"))
+    except Exception as e:
+        raise Exception(f"Error listing directory sizes for {dir_path}: {e}")
 
-            # Parse size information
-            if size_info:
-                size_parts = size_info.split()
-                if len(size_parts) >= 2:
-                    fdisk_info["disk"]["bytes"] = size_parts[0]
-                    fdisk_info["disk"]["sectors"] = size_parts[-2]
-
-        # Partition Information
-        # if line.startswith("/dev/"):
-        #     # Example: /dev/loop0p1       2048    4095    2048  1M  Linux
-        #     parts = line.split()
-        #     if len(parts) >= 6:
-        #         partition_info = {
-        #             "device": parts[0],
-        #             "start": parts[1],
-        #             "end": parts[2],
-        #             "sectors": parts[3],
-        #             "size": parts[4],
-        #             "type": " ".join(parts[5:]),
-        #         }
-        #         fdisk_info["partitions"].append(partition_info)
-
-    return fdisk_info
+    return entries
