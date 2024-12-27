@@ -103,7 +103,7 @@ def unmount_disk(ctx,mount_path):
 @click.argument("file_path", type=click.Path())
 @click.option(
     "--tool",
-    type=click.Choice(["fdisk", "parted", "mmls", "file", "disktype", "all"], case_sensitive=False),
+    type=click.Choice(["fdisk", "parted", "mmls", "file", "disktype","ewfinfo", "all"], case_sensitive=False),
     default="all",
     help=(
         "Specify the tool to use:\n"
@@ -112,6 +112,7 @@ def unmount_disk(ctx,mount_path):
         "- mmls: Displays partition layout for forensic analysis.\n"
         "- file: Displays the file type of the disk image.\n"
         "- disktype: Displays detailed disk analysis, including filesystems and labels.\n"
+        "- ewfinfo: Displays detailed disk information from E01 format. \n"
         "- all: Runs all tools (default)."
     ))
 @click.pass_context
@@ -132,6 +133,8 @@ def disk_image_info(ctx, file_path, tool):
 
     tools = ["fdisk", "parted", "mmls", "file", "disktype"] if tool == "all" else [tool]
 
+    if file_path.lower().endswith("e01"):
+        tools.append("ewfinfo")
     try:
         for t in tools:
             output = _run_disk_tool(t, file_path)
@@ -241,6 +244,7 @@ def _run_disk_tool(tool, file_path):
             "mmls": ["mmls", file_path],
             "file": ["file", file_path],
             "disktype": ["disktype", file_path],
+            "ewfinfo": ["ewfinfo", file_path],
         }
 
         if tool not in commands:
