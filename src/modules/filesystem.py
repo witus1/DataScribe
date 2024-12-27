@@ -98,6 +98,47 @@ def unmount_disk(ctx,mount_path):
     except Exception as e:
         click.echo(f"Error: {e}")
 
+
+@module.command()
+@click.argument("file_path", type=click.Path())
+@click.option(
+    "--tool",
+    type=click.Choice(["fdisk", "parted", "mmls", "file", "disktype", "all"], case_sensitive=False),
+    default="all",
+    help=(
+        "Specify the tool to use:\n"
+        "- fdisk: Displays the partition table of the disk image.\n"
+        "- parted: Displays detailed partition information.\n"
+        "- mmls: Displays partition layout for forensic analysis.\n"
+        "- file: Displays the file type of the disk image.\n"
+        "- disktype: Displays detailed disk analysis, including filesystems and labels.\n"
+        "- all: Runs all tools (default)."
+    ))
+@click.pass_context
+def disk_image_info(ctx, file_path, tool):
+    """
+    Analyze a disk image using various Linux tools.
+
+    FILE_PATH is the path to the disk image file.
+    """
+    try:
+        # Validate input paths
+        check_path_type(ctx.obj['workdir'], file_path, has_to_be_file=True)
+        file_path = resolve_path(ctx.obj['workdir'], file_path)
+    except Exception as e:
+        click.echo(e)
+        sys.exit()
+
+
+    tools = ["fdisk", "parted", "mmls", "file", "disktype"] if tool == "all" else [tool]
+
+    try:
+        for t in tools:
+            output = _run_disk_tool(t, file_path)
+            click.echo(f"\n{t.upper()} Output:\n{'=' * 40}\n{output}\n")
+    except Exception as e:
+        click.echo(f"Error: {e}")
+
 #-------------help functions-------------
 
 def _list_directory_sizes(dir_path, depth, include_files):
@@ -182,3 +223,33 @@ def _unmount_disk_image(mount_path):
         raise Exception(f"Error unmounting the disk image: {e.stderr.strip()}")
     except Exception as e:
         raise Exception(f"An unexpected error occurred: {e}")
+
+def _run_disk_tool(tool, file_path):
+    """
+    Run a disk analysis tool on a given image file.
+
+    :param tool: The tool to run (e.g., 'fdisk', 'parted', 'mmls', 'file', 'disktype').
+    :param file_path: The path to the disk image file.
+    :return: The output of the tool.
+    :raises Exception: If the tool fails or is not found.
+    """
+    try:
+        # Define the commands for each tool
+        commands = {
+            "fdisk": ["fdisk", "-l", file_path],
+            "parted": ["parted", file_path, "print"],
+            "mmls": ["mmls", file_path],
+            "file": ["file", file_path],
+            "disktype": ["disktype", file_path],
+        }
+
+        if tool not in commands:
+            raise ValueError(f"Unsupported tool: {tool}")
+
+        return run_command(commands[tool])
+    except FileNotFoundError:
+        raise Exception(f"Tool '{tool}' is not installed or not in the PATH.")
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"Error running '{tool}': {e.stderr.strip()}")
+    except Exception as e:
+        raise Exception(f"An unexpected error occurred with '{tool}': {e}")
