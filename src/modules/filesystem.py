@@ -51,8 +51,9 @@ def directory_size(ctx, dir_path, depth, include_files):
 @module.command()
 @click.argument("file_path", type=click.Path())
 @click.argument("mount_path", type=click.Path())
+@click.option("--e01", is_flag=True, default=False, help="Indicate that the image is an E01 disk image.")
 @click.pass_context
-def mount_disk(ctx, file_path, mount_path):
+def mount_disk(ctx, file_path, mount_path, e01):
     """
     Mount a disk image in read-only mode.
 
@@ -71,15 +72,19 @@ def mount_disk(ctx, file_path, mount_path):
         sys.exit()
 
     try:
-        _mount_disk_image(file_path, mount_path)
+        if e01:
+            _mount_disk_image_e01(file_path, mount_path)
+        else:
+            _mount_disk_image(file_path, mount_path)
     except Exception as e:
         click.echo(f"Error: {e}")
 
 
 @module.command()
 @click.argument("mount_path", type=click.Path())
+@click.option("--e01", is_flag=True, default=False, help="Indicate that the image is an E01 disk image.")
 @click.pass_context
-def unmount_disk(ctx,mount_path):
+def unmount_disk(ctx,mount_path, e01):
     """
     Unmount a mounted disk image.
 
@@ -94,7 +99,10 @@ def unmount_disk(ctx,mount_path):
         sys.exit()
 
     try:
-        _unmount_disk_image(mount_path)
+        if e01:
+            _unmount_disk_image_e01(mount_path)
+        else:
+            _unmount_disk_image(mount_path)
     except Exception as e:
         click.echo(f"Error: {e}")
 
@@ -182,7 +190,6 @@ def _list_directory_sizes(dir_path, depth, include_files):
 
     return entries
 
-# todo need to fix bug, not there is problem with mounting disk with partitions
 def _mount_disk_image(file_path, mount_path):
     """
         Mount a disk image in read-only mode using a loop device.
@@ -194,20 +201,33 @@ def _mount_disk_image(file_path, mount_path):
     try:
         # Ensure the mount point exists or create it
         if not os.path.exists(mount_path):
-            subprocess.run(["sudo", "mkdir", mount_path], check=True)
+            subprocess.run(["sudo", "mkdir","-p", mount_path], check=True)
 
         if len(os.listdir(mount_path)) != 0:
             raise Exception(f"Dir is not empty: {mount_path}")
 
         # Mount the disk image in read-only mode
-        command = ["sudo", "mount", "-o", "ro,loop,noexec", file_path, mount_path]
-        subprocess.run(command, check=True)
-        click.echo(f"Disk image {file_path} successfully mounted at {mount_path} in read-only mode.")
+
+        loop_device = _setup_loop_device(file_path)
+        partitions = _get_partition_info(loop_device)
+        try:
+            click.echo("Available partitions:")
+            for idx, partition in enumerate(partitions, start=1):
+                click.echo(f"{idx}: {partition}")
+            choice = click.prompt("Choose a partition to mount", type=int, default=1)
+            _mount_partition(partitions[choice - 1], mount_path)
+        except:
+            command = ["sudo", "mount", "-o", "ro,noexec", loop_device, mount_path]
+            subprocess.run(command, check=True)
+            click.echo(f"Disk image {file_path} successfully mounted at {mount_path} in read-only mode.")
 
     except subprocess.CalledProcessError as e:
         raise Exception(f"Error mounting the disk image: {e.stderr.strip()}")
     except Exception as e:
         raise Exception(f"An unexpected error occurred: {e}")
+
+def _mount_disk_image_e01(file_path, mount_path):
+    pass
 
 def _unmount_disk_image(mount_path):
     """
@@ -226,6 +246,9 @@ def _unmount_disk_image(mount_path):
         raise Exception(f"Error unmounting the disk image: {e.stderr.strip()}")
     except Exception as e:
         raise Exception(f"An unexpected error occurred: {e}")
+
+def _unmount_disk_image_e01(mount_path):
+    pass
 
 def _run_disk_tool(tool, file_path):
     """
@@ -257,3 +280,60 @@ def _run_disk_tool(tool, file_path):
         raise Exception(f"Error running '{tool}': {e.stderr.strip()}")
     except Exception as e:
         raise Exception(f"An unexpected error occurred with '{tool}': {e}")
+
+
+def _setup_loop_device(img_file):
+    """
+    Set up a loop device for a disk image.
+
+    :param img_file: Path to the disk image file.
+    :return: Loop device name (e.g., /dev/loop0).
+    :raises Exception: If loop device setup fails.
+    """
+    try:
+        return run_command(["sudo", "losetup", "--show", "-fP", img_file])
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"Error setting up loop device: {e.stderr.strip()}")
+
+def _get_partition_info(loop_device):
+    """
+    Retrieve partition information from a loop device.
+
+    :param loop_device: The loop device (e.g., /dev/loop0).
+    :return: List of partitions (e.g., ['/dev/loop0p1', '/dev/loop0p2']).
+    """
+    try:
+        command = ["sudo", "parted", "-s", loop_device, "print"]
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        output = result.stdout
+        partitions = []
+        for line in output.splitlines():
+            line = line.strip()
+            if not line or not line[0].isdigit():  # Skip empty lines or lines that don't start with a number
+                continue
+            columns = line.split()
+            if len(columns) < 1:
+                continue
+            partition_number = columns[0]
+            partitions.append(f"{loop_device}p{partition_number}")
+        click.echo(partitions)
+        return partitions
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"Error retrieving partition info: {e.stderr.strip()}")
+
+def _mount_partition(partition, mount_point):
+    """
+    Mount a specific partition.
+
+    :param partition: Partition to mount (e.g., /dev/loop0p1).
+    :param mount_point: Directory where the partition will be mounted.
+    :raises Exception: If mounting fails.
+    """
+    try:
+        if not os.path.exists(mount_point):
+            os.makedirs(mount_point)
+        command = ["sudo", "mount", "-o", "ro,noexec", partition, mount_point]
+        subprocess.run(command, check=True)
+        print(f"Partition {partition} successfully mounted at {mount_point} in read-only mode.")
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"Error mounting partition: {e.stderr.strip()}")
