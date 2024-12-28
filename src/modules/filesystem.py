@@ -51,9 +51,8 @@ def directory_size(ctx, dir_path, depth, include_files):
 @module.command()
 @click.argument("file_path", type=click.Path())
 @click.argument("mount_path", type=click.Path())
-@click.option("--e01", is_flag=True, default=False, help="Indicate that the image is an E01 disk image.")
 @click.pass_context
-def mount_disk(ctx, file_path, mount_path, e01):
+def mount_disk(ctx, file_path, mount_path):
     """
     Mount a disk image in read-only mode.
 
@@ -72,19 +71,15 @@ def mount_disk(ctx, file_path, mount_path, e01):
         sys.exit()
 
     try:
-        if e01:
-            _mount_disk_image_e01(file_path, mount_path)
-        else:
-            _mount_disk_image(file_path, mount_path)
+        _mount_disk_image(file_path, mount_path)
     except Exception as e:
         click.echo(f"Error: {e}")
 
 
 @module.command()
 @click.argument("mount_path", type=click.Path())
-@click.option("--e01", is_flag=True, default=False, help="Indicate that the image is an E01 disk image.")
 @click.pass_context
-def unmount_disk(ctx,mount_path, e01):
+def unmount_disk(ctx,mount_path):
     """
     Unmount a mounted disk image.
 
@@ -99,10 +94,7 @@ def unmount_disk(ctx,mount_path, e01):
         sys.exit()
 
     try:
-        if e01:
-            _unmount_disk_image_e01(mount_path)
-        else:
-            _unmount_disk_image(mount_path)
+        _unmount_disk_image(mount_path)
     except Exception as e:
         click.echo(f"Error: {e}")
 
@@ -139,10 +131,9 @@ def disk_image_info(ctx, file_path, tool):
         sys.exit()
 
 
-    tools = ["fdisk", "parted", "mmls", "file", "disktype"] if tool == "all" else [tool]
+    tools = ["fdisk", "parted", "mmls", "file", "disktype","ewfinfo"] if tool == "all" else [tool]
 
-    if file_path.lower().endswith("e01"):
-        tools.append("ewfinfo")
+
     try:
         for t in tools:
             output = _run_disk_tool(t, file_path)
@@ -150,6 +141,43 @@ def disk_image_info(ctx, file_path, tool):
     except Exception as e:
         click.echo(f"Error: {e}")
 
+
+@module.command()
+@click.argument("output_file_name", type=click.Path())
+@click.argument("input_files",nargs=-1 ,type=click.Path())
+@click.pass_context
+def ewfexport(ctx,output_file_name, input_files):
+    """
+        Convert an EWF (E01) disk image to a raw disk image.
+
+        INPUT_FILES is the path to the EWF disk image.
+        OUTPUT_FILE_NAME is the path where the raw disk image will be saved. It should be the path to file without extension.
+    """
+
+    try:
+        # Ensure at least one input file is provided
+        if not input_files:
+            raise Exception("No input files provided. Please specify at least one EWF file.")
+
+        # check_path_type(ctx.obj['workdir'], output_file_name, has_to_be_file=False)
+        output_file_name = resolve_path(ctx.obj['workdir'], output_file_name)
+
+        if output_file_name == ctx.obj['workdir']:
+            raise Exception("Output file name cannot be the same as the working directory.")
+
+        # Validate and resolve each input file
+        resolved_input_files = []
+        for file_path in input_files:
+            # Validate input paths
+            check_path_type(ctx.obj['workdir'], file_path, has_to_be_file=True)
+            resolved_path = resolve_path(ctx.obj['workdir'], file_path)
+            resolved_input_files.append(resolved_path)
+
+        # Perform the conversion
+        _export_ewf_to_raw(resolved_input_files, output_file_name)
+    except Exception as e:
+        click.echo(e)
+        sys.exit()
 #-------------help functions-------------
 
 def _list_directory_sizes(dir_path, depth, include_files):
@@ -226,8 +254,6 @@ def _mount_disk_image(file_path, mount_path):
     except Exception as e:
         raise Exception(f"An unexpected error occurred: {e}")
 
-def _mount_disk_image_e01(file_path, mount_path):
-    pass
 
 def _unmount_disk_image(mount_path):
     """
@@ -247,8 +273,6 @@ def _unmount_disk_image(mount_path):
     except Exception as e:
         raise Exception(f"An unexpected error occurred: {e}")
 
-def _unmount_disk_image_e01(mount_path):
-    pass
 
 def _run_disk_tool(tool, file_path):
     """
@@ -337,3 +361,22 @@ def _mount_partition(partition, mount_point):
         print(f"Partition {partition} successfully mounted at {mount_point} in read-only mode.")
     except subprocess.CalledProcessError as e:
         raise Exception(f"Error mounting partition: {e.stderr.strip()}")
+
+
+def _export_ewf_to_raw(input_files, output_file_name):
+    """
+        Convert an EWF (E01) disk image series to a raw image using ewfexport.
+
+        :param input_files: List of paths to the input EWF disk image files.
+        :param output_file: Path to save the output raw disk image.
+        :raises Exception: If the conversion fails.
+        """
+    try:
+        # Construct the ewfexport command
+        command = ["ewfexport", "-t", output_file_name, "-f", "raw", "-u"] + input_files
+        subprocess.run(command, check=True)
+        print(f"EWF disk image {', '.join(input_files)} successfully converted to raw disk image {output_file}.")
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"Error running ewfexport: {e.stderr.strip()}")
+    except Exception as e:
+        raise Exception(f"An unexpected error occurred: {e}")
