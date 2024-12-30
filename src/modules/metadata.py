@@ -21,7 +21,7 @@ def module():
 @module.command()
 @click.argument("file_path", type=click.Path())
 @click.option("--save-as", type=click.Choice(["json", "xml", "txt"], case_sensitive=False),help="Save metadata as JSON, XML,TXT file.")
-@click.option("--save-to", type=click.STRING, help="Path to save metadata to. Users home dir is default")
+@click.option("--save-to", type=click.Path(), help="Path to save metadata to. Users home dir is default")
 @click.pass_context
 def get_all_metadata(ctx, file_path, save_as: str, save_to: str):
     """
