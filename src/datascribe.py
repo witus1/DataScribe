@@ -2,7 +2,7 @@ import click
 import os
 from utils.config import set_working_directory, get_working_directory, save_config
 from utils.helper import resolve_path
-from modules import metadata, filesystem, multimedia, text_extraction
+from modules import metadata, filesystem, multimedia, log_extraction
 import utils.tools_availability as ta
 import subprocess
 
@@ -60,7 +60,7 @@ def check_tools(install):
 cli.add_command(filesystem.module, name="filesystem")
 cli.add_command(metadata.module, name="metadata")
 cli.add_command(multimedia.module, name="multimedia")
-cli.add_command(text_extraction.module, name="text_extraction")
+cli.add_command(log_extraction.module, name="log-extraction")
 
 if __name__ == "__main__":
     cli()

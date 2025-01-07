@@ -277,7 +277,6 @@ def find_files_by_date(ctx, dir_path, date_type, older_than, newer_than, between
         sys.exit()
 
     try:
-        click.echo(dir_path)
         matching_files = _find_files_by_date(dir_path, date_type, older_than, newer_than, between, file_type, depth)
         if matching_files:
             click.echo(f"Found {len(matching_files)} matching files:")
@@ -334,7 +333,7 @@ def get_file_mime_type(ctx, file_path):
         check_path_type(ctx.obj['workdir'], file_path, has_to_be_file=True)
         file_path = resolve_path(ctx.obj['workdir'], file_path)
 
-        return _get_file_mime_type(file_path)
+        click.echo(_get_file_mime_type(file_path))
     except Exception as e:
         click.echo(e)
         sys.exit()
@@ -404,8 +403,8 @@ def find_files_by_permissions(ctx,dir_path, owner, group, other, all, depth, inc
     """
     try:
         # Validate input paths
-        check_path_type(ctx.obj['workdir'], file_path, has_to_be_file=True)
-        file_path = resolve_path(ctx.obj['workdir'], file_path)
+        check_path_type(ctx.obj['workdir'], dir_path, has_to_be_file=False)
+        dir_path = resolve_path(ctx.obj['workdir'], dir_path)
     except Exception as e:
         click.echo(e)
         sys.exit()
@@ -491,7 +490,6 @@ def _estimate_gps_location(gps_object):
 
     geolocator = Nominatim(user_agent="gps_metadata_tool")
     location_info = geolocator.reverse((latitude, longitude), language="en")
-
     return location_info
 
 def _get_raw_gps_metadata(file_path):
@@ -695,7 +693,8 @@ def _find_files_by_date(dir_path, date_type, older_than, newer_than, between, fi
                 matching_files.append(file_path)
 
             except Exception as e:
-                click.echo(f"Warning: Skipping file {file_path}: {e}")
+                pass
+                # click.echo(f"Warning: Skipping file {file_path}: {e}")
 
     return matching_files
 

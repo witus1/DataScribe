@@ -103,13 +103,12 @@ def unmount_disk(ctx,mount_path):
 @click.argument("file_path", type=click.Path())
 @click.option(
     "--tool",
-    type=click.Choice(["fdisk", "parted", "mmls", "file", "disktype","ewfinfo", "all"], case_sensitive=False),
+    type=click.Choice(["fdisk", "parted", "file", "disktype","ewfinfo", "all"], case_sensitive=False),
     default="all",
     help=(
         "Specify the tool to use:\n"
         "- fdisk: Displays the partition table of the disk image.\n"
         "- parted: Displays detailed partition information.\n"
-        "- mmls: Displays partition layout for forensic analysis.\n"
         "- file: Displays the file type of the disk image.\n"
         "- disktype: Displays detailed disk analysis, including filesystems and labels.\n"
         "- ewfinfo: Displays detailed disk information from E01 format. \n"
@@ -131,7 +130,7 @@ def disk_image_info(ctx, file_path, tool):
         sys.exit()
 
 
-    tools = ["fdisk", "parted", "mmls", "file", "disktype","ewfinfo"] if tool == "all" else [tool]
+    tools = ["fdisk", "parted", "file", "disktype","ewfinfo"] if tool == "all" else [tool]
 
 
     try:
@@ -288,7 +287,6 @@ def _run_disk_tool(tool, file_path):
         commands = {
             "fdisk": ["fdisk", "-l", file_path],
             "parted": ["parted", file_path, "print"],
-            "mmls": ["mmls", file_path],
             "file": ["file", file_path],
             "disktype": ["disktype", file_path],
             "ewfinfo": ["ewfinfo", file_path],
@@ -372,10 +370,14 @@ def _export_ewf_to_raw(input_files, output_file_name):
         :raises Exception: If the conversion fails.
         """
     try:
+        output_dir = os.path.dirname(output_file_name)  # Extract the directory part of the path
+        if output_dir:  # Check if there's a directory part in the path
+            os.makedirs(output_dir, exist_ok=True)
+
         # Construct the ewfexport command
         command = ["ewfexport", "-t", output_file_name, "-f", "raw", "-u"] + input_files
         subprocess.run(command, check=True)
-        print(f"EWF disk image {', '.join(input_files)} successfully converted to raw disk image {output_file}.")
+        print(f"EWF disk image {', '.join(input_files)} successfully converted to raw disk image {output_file_name}")
     except subprocess.CalledProcessError as e:
         raise Exception(f"Error running ewfexport: {e.stderr.strip()}")
     except Exception as e:

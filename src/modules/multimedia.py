@@ -41,31 +41,36 @@ def convert_image_format(ctx ,file_path, output_path, resize, crop, grayscale, b
         sys.exit()
 
     command = ["ffmpeg", "-i", file_path]
+    filters = []
 
+    # Add filters based on the options
     if resize:
         width, height = resize
-        command.extend(["-vf", f"scale={width}:{height}"])
+        filters.append(f"scale={width}:{height}")
 
     if crop:
         width, height, x_offset, y_offset = crop
-        crop_filter = f"crop={width}:{height}:{x_offset}:{y_offset}"
-        command.extend(["-vf", crop_filter])
+        filters.append(f"crop={width}:{height}:{x_offset}:{y_offset}")
 
     if grayscale:
-        command.extend(["-vf", "format=gray"])
+        filters.append("format=gray")
 
     if brightness or contrast or saturation:
-        eq_filter = f"eq=brightness={brightness or 0}:contrast={contrast or 1}:saturation={saturation or 1}"
-        command.extend(["-vf", eq_filter])
+        filters.append(f"eq=brightness={brightness or 0}:contrast={contrast or 1}:saturation={saturation or 1}")
+
+    # Combine all filters into a single -vf parameter
+    if filters:
+        filter_string = ",".join(filters)
+        command.extend(["-vf", filter_string])
 
     if quiet:
         command.extend(["-loglevel", "quiet"])
+
     # Specify the output file
     command.append(output_path)
 
     # Execute the command
     try:
-        click.echo("wiadomosc dnia")
         subprocess.run(command, check=True)
         click.echo(f"Image successfully converted to {output_path}")
     except subprocess.CalledProcessError as e:
@@ -133,7 +138,7 @@ def extract_frames_gif(ctx,file_path, output_folder, fps, frame_prefix, format, 
 @click.pass_context
 def extract_frames_video(ctx, file_path, output_folder, fps, start_time, end_time, frame_prefix, format, resize, grayscale, quiet):
     """
-    Extract frames from a video using ffmpeg with forensic-focused options.
+    Extract frames from a video.
 
     INPUT_FILE: Path to the input video file.
     OUTPUT_FOLDER: Folder to save the extracted frames.
@@ -188,7 +193,7 @@ def extract_frames_video(ctx, file_path, output_folder, fps, start_time, end_tim
 @module.command()
 @click.argument('file_path', type=click.Path())
 @click.argument('output_file', type=click.Path())
-@click.option('--audio_codec', type=str, default=None, help="Specify the audio codec (e.g., aac, mp3, pcm_s16le).")
+@click.option('--audio-codec', type=str, default=None, help="Specify the audio codec (e.g., aac, mp3, pcm_s16le).")
 @click.option('--bitrate', type=str, default=None, help="Set the audio bitrate (e.g., 128k for 128 kbps).")
 @click.option('--start-time', type=str, default=None, help="Start time for extraction in format HH:MM:SS (e.g., 00:01:30 for 1 min 30 secs).")
 @click.option('--end-time', type=str, default=None, help="End time for extraction in format HH:MM:SS (e.g., 00:02:30 for 2 mins 30 secs).")
@@ -198,9 +203,9 @@ def extract_frames_video(ctx, file_path, output_folder, fps, start_time, end_tim
 @click.pass_context
 def extract_audio(ctx,file_path, output_file, audio_codec, bitrate, start_time, end_time, channels, sample_rate, quiet):
     """
-    Extract the audio track from a video file with forensic-focused options.
+    Extract the audio track from a video file.
 
-    INPUT_FILE: Path to the input video file.
+    FILE_PATH: Path to the input video file.
     OUTPUT_FILE: Path to the output audio file with the desired format.
     """
     try:
@@ -266,7 +271,7 @@ def extract_audio(ctx,file_path, output_file, audio_codec, bitrate, start_time, 
 @click.pass_context
 def convert_video(ctx, file_path, output_file, codec, bitrate, fps, start_time, end_time, resize, grayscale, quiet):
     """
-    Convert a video to another format with forensic options.
+    Convert a video to another format.
 
     FILE_PATH: Path to the input video file.
     OUTPUT_FILE: Path to the output video file with the desired format.
@@ -324,23 +329,23 @@ def convert_video(ctx, file_path, output_file, codec, bitrate, fps, start_time, 
 
 
 @module.command()
-@click.argument('input_file', type=click.Path(exists=True))
+@click.argument('file_path', type=click.Path())
 @click.argument('output_file', type=click.Path())
-@click.option('--audio_codec', type=str, default=None, help="Specify the audio codec (e.g., aac, mp3, pcm_s16le).")
+@click.option('--audio-codec', type=str, default=None, help="Specify the audio codec (e.g., aac, mp3, pcm_s16le).")
 @click.option('--bitrate', type=str, default=None, help="Set the audio bitrate (e.g., 128k for 128 kbps).")
-@click.option('--sample_rate', type=int, default=None, help="Set the audio sample rate (e.g., 44100 for 44.1 kHz).")
+@click.option('--sample-rate', type=int, default=None, help="Set the audio sample rate (e.g., 44100 for 44.1 kHz).")
 @click.option('--channels', type=int, default=None, help="Set the number of audio channels (e.g., 1 for mono, 2 for stereo).")
-@click.option('--start_time', type=str, default=None, help="Start time for conversion in format HH:MM:SS (e.g., 00:01:30 for 1 min 30 secs).")
-@click.option('--end_time', type=str, default=None, help="End time for conversion in format HH:MM:SS (e.g., 00:02:30 for 2 mins 30 secs).")
+@click.option('--start-time', type=str, default=None, help="Start time for conversion in format HH:MM:SS (e.g., 00:01:30 for 1 min 30 secs).")
+@click.option('--end-time', type=str, default=None, help="End time for conversion in format HH:MM:SS (e.g., 00:02:30 for 2 mins 30 secs).")
 @click.option('--normalize', is_flag=True, help="Normalize audio levels for forensic clarity.")
-@click.option('--remove_noise', is_flag=True, help="Apply basic noise reduction using an audio filter.")
+@click.option('--remove-noise', is_flag=True, help="Apply basic noise reduction using an audio filter.")
 @click.option("--quiet", is_flag=True, default=False,help="Quiet mode.")
 @click.pass_context
 def convert_audio(ctx, file_path, output_file, audio_codec, bitrate, sample_rate, channels, start_time, end_time, normalize, remove_noise, quiet):
     """
     Convert audio files from one format to another with forensic-focused options.
 
-    INPUT_FILE: Path to the input audio file.
+    FILE_PATH: Path to the input audio file.
     OUTPUT_FILE: Path to the output audio file with the desired format.
     """
     try:
@@ -399,7 +404,7 @@ def convert_audio(ctx, file_path, output_file, audio_codec, bitrate, sample_rate
 
 @module.command()
 @click.argument('file_path', type=click.Path())
-@click.option('--output_dir', type=click.Path(), default="binwalk_output", help="Directory to save extracted files. Default is 'binwalk_output'.")
+@click.option('--output_dir', type=click.Path(), default="extraction_output", help="Directory to save extracted files. Default is 'binwalk_output'.")
 @click.option('--depth', type=int, default=0, help="Limit the depth of extraction. Default is 0 (current dir).")
 @click.option('--quiet', is_flag=True, help="Suppress binwalk's verbose output.")
 @click.pass_context
@@ -442,6 +447,12 @@ def extract_embedded_files(ctx, file_path, output_dir, depth, quiet):
 @click.option("--depth", type=int, default=0, help="Limit the depth of extraction. Default is 0 (current dir).")
 @click.pass_context
 def search_embedded_files(ctx, dir_path, depth):
+    """
+    Search embedded files from a given DIR_PATH.
+
+    DIR_PATH: Path to the directory to search embedded files from.
+    """
+
     try:
         # Validate input paths
         check_path_type(ctx.obj['workdir'], dir_path, has_to_be_file=False)
@@ -467,7 +478,12 @@ def search_embedded_files(ctx, dir_path, depth):
 @module.command()
 @click.argument('file_path', type=click.Path())
 @click.pass_context
-def is_embedded_file(ctx, file_path):
+def embedded_file_content(ctx, file_path):
+    """
+    Prints out the content of an embedded file.
+
+    FILE_PATH: Path to the embedded file.
+    """
     try:
         # Validate input paths
         check_path_type(ctx.obj['workdir'], file_path, has_to_be_file=True)
