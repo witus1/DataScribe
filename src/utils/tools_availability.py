@@ -2,7 +2,7 @@ import subprocess
 import shutil
 
 def check_tool_availability():
-    tools = ["dd", "find", "df", "du", "exiftool", "binwalk", "file", "ffmpeg", "sleuthkit", "disktype", "parted"]
+    tools = ["find", "du", "exiftool", "binwalk", "file", "ffmpeg", "sleuthkit", "disktype", "parted", "stat", "fdisk", "ewf-tools", "losetup"]
     missing_tools = []
 
     for tool in tools:

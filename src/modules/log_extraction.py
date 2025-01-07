@@ -3,6 +3,6 @@ import click
 @click.group()
 def module():
     """
-    Text Extraction analysis module.
+    Log Extraction analysis module.
     """
     pass
